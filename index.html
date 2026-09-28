@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none';">
   <title>App Inventor Web Preview</title>
-  <link rel="stylesheet" href="./preview-host.css?v=12">
+  <link rel="stylesheet" href="./preview-host.css?v=13">
   <script defer src="./assets/jszip.min.js"></script>
   <script defer src="./runtime/capabilities.js?v=3"></script>
   <script defer src="./runtime/adapter.js?v=2"></script>
   <script defer src="./runtime/compatibility.js?v=3"></script>
-  <script defer src="./preview-host.js?v=17"></script>
+  <script defer src="./preview-host.js?v=20"></script>
 </head>
 <body>
   <main class="page">
@@ -31,13 +31,19 @@
             <option value="monitor">Monitor (768 x 1024)</option>
           </select>
         </label>
-        <div class="phone" id="preview-phone" data-orientation="portrait" data-size="phone">
-          <div class="phone-display">
-            <div class="phone-status" aria-hidden="true"><img src="./assets/phonebarAndroidMaterial.png" alt=""></div>
-            <iframe id="web-preview-frame" title="Interactive app preview" sandbox="allow-scripts"></iframe>
-            <div class="phone-navigation" aria-hidden="true">
-              <span class="nav-back"></span><span class="nav-home"></span><span class="nav-overview"></span>
+        <div class="phone-with-action">
+          <div class="phone" id="preview-phone" data-orientation="portrait" data-size="phone">
+            <div class="phone-display">
+              <div class="phone-status" aria-hidden="true"><img src="./assets/phonebarAndroidMaterial.png" alt=""></div>
+              <iframe id="web-preview-frame" title="Interactive app preview" sandbox="allow-scripts"></iframe>
+              <div class="phone-navigation" aria-hidden="true">
+                <span class="nav-back"></span><span class="nav-home"></span><span class="nav-overview"></span>
+              </div>
             </div>
+          </div>
+          <div class="capture-actions">
+            <button type="button" id="save-screenshot" disabled>Save screenshot</button>
+            <p id="capture-status" role="status" aria-live="polite"></p>
           </div>
         </div>
         <p id="launch-status" role="status" data-kind="waiting">Loading preview…</p>

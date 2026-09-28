@@ -11,6 +11,15 @@ body { margin: 0; }
 .workspace { display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .workspace[hidden], .compatibility[hidden] { display: none; }
 .device-stage { display: flex; flex-direction: column; align-items: center; gap: 8px; width: 100%; }
+.phone-with-action { display: flex; align-items: flex-start; justify-content: center; gap: 16px; max-width: 100%; }
+.capture-actions { width: 150px; padding-top: 8px; }
+#save-screenshot { width: 100%; min-height: 38px; padding: 7px 10px; border: 1px solid #32449b; border-radius: 5px; background: #3f51b5; color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+#save-screenshot:disabled { opacity: .55; cursor: default; }
+#capture-status { margin: 8px 0; color: #52627b; font-size: 13px; line-height: 1.35; }
+@media (max-width: 650px) {
+  .phone-with-action { flex-direction: column; align-items: center; }
+  .capture-actions { width: min(390px, calc(100vw - 32px)); padding-top: 0; }
+}
 .device-size-control { display: flex; align-items: center; gap: 8px; font-size: 14px; }
 .device-size-control select { min-height: 32px; padding: 4px 8px; border: 1px solid #c4c8cc; border-radius: 4px; background: #fff; color: #222; font: inherit; }
 .phone {
