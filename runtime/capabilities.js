@@ -20,7 +20,7 @@ const COMPONENTS = new Map([
     element: "button",
     properties: new Set([
       "Text", "Width", "Height", "Visible", "Enabled", "BackgroundColor", "TextColor",
-      "FontSize", "FontBold", "FontItalic", "TextAlignment"
+      "FontSize", "FontBold", "FontItalic", "TextAlignment", "Shape"
     ]),
     events: new Set(["Click"]),
     defaults: { Text: "Button", Visible: true, Enabled: true, FontSize: 14 }
@@ -42,7 +42,8 @@ const COMPONENTS = new Map([
   }],
   ["Spinner", {
     element: "select",
-    properties: new Set(["Width", "Height", "Visible", "Enabled", "ElementsFromString", "Selection"]),
+    properties: new Set(["Width", "Height", "Visible", "Enabled", "ElementsFromString", "Selection",
+      "BackgroundColor", "FontSize", "FontTypeface", "TextColor"]),
     events: new Set(),
     defaults: { Visible: true, Enabled: true, ElementsFromString: "" }
   }]
