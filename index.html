@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none';">
+  <title>App Inventor Web Preview</title>
+  <link rel="stylesheet" href="./preview-host.css?v=12">
+  <script defer src="./assets/jszip.min.js"></script>
+  <script defer src="./runtime/capabilities.js?v=2"></script>
+  <script defer src="./runtime/adapter.js?v=2"></script>
+  <script defer src="./runtime/compatibility.js?v=3"></script>
+  <script defer src="./preview-host.js?v=16"></script>
+</head>
+<body>
+  <main class="page">
+    <div class="upload-controls" id="upload-controls">
+      <label for="aia-file">Choose an App Inventor .aia file</label>
+      <input id="aia-file" type="file" accept=".aia,application/zip">
+      <label for="screen-choice" id="screen-choice-label" hidden>Screen</label>
+      <select id="screen-choice" hidden></select>
+      <p>Your file stays in this browser. Preview supports a limited set of App Inventor components and blocks.</p>
+    </div>
+
+    <section class="workspace" id="preview-workspace" aria-label="Web Preview" hidden>
+      <div class="device-stage">
+        <label class="device-size-control" for="device-size">Device size
+          <select id="device-size">
+            <option value="phone">Phone (320 x 650)</option>
+            <option value="tablet">Tablet (480 x 675)</option>
+            <option value="monitor">Monitor (768 x 1024)</option>
+          </select>
+        </label>
+        <div class="phone" id="preview-phone" data-orientation="portrait" data-size="phone">
+          <div class="phone-display">
+            <div class="phone-status" aria-hidden="true"><img src="./assets/phonebarAndroidMaterial.png" alt=""></div>
+            <iframe id="web-preview-frame" title="Interactive app preview" sandbox="allow-scripts"></iframe>
+            <div class="phone-navigation" aria-hidden="true">
+              <span class="nav-back"></span><span class="nav-home"></span><span class="nav-overview"></span>
+            </div>
+          </div>
+        </div>
+        <p id="launch-status" role="status" data-kind="waiting">Loading preview…</p>
+      </div>
+
+      <details class="compatibility" id="compatibility-details" hidden>
+        <summary id="compatibility-title">Preview limits</summary>
+        <p id="compatibility-message">Waiting for the current editor project…</p>
+        <h2>Unsupported</h2>
+        <ul id="unsupported-features"></ul>
+        <div id="android-only-section" hidden>
+          <h2>Android build settings</h2>
+          <ul id="android-only-features"></ul>
+        </div>
+        <div class="supported-section">
+          <h2>Supported</h2>
+          <ul id="supported-features"></ul>
+        </div>
+      </details>
+    </section>
+  </main>
+</body>
+</html>
