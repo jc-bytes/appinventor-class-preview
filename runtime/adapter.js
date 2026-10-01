@@ -1,5 +1,5 @@
 (function (WebPreview) {
-const { BLOCKS, COMPONENTS, COMPONENT_METADATA_PROPERTIES, FORM_BUILD_ONLY_PROPERTIES, LIMITS } = WebPreview;
+const { BLOCKS, COMPONENTS, COMPONENT_METADATA_PROPERTIES, FORM_BUILD_ONLY_PROPERTIES, FORM_EDITOR_ONLY_PROPERTIES, LIMITS } = WebPreview;
 
 const NAME_PATTERN = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
 const GLOBAL_PREFIX = "global ";
@@ -272,7 +272,8 @@ function normalizeComponent(properties, state, depth) {
 
   const values = Object.create(null);
   for (const [key, value] of Object.entries(properties)) {
-    if (COMPONENT_METADATA_PROPERTIES.has(key) || key.startsWith("$")) continue;
+    if (COMPONENT_METADATA_PROPERTIES.has(key) || key.startsWith("$") ||
+        (type === "Form" && FORM_EDITOR_ONLY_PROPERTIES.has(key))) continue;
     if (["string", "number", "boolean"].includes(typeof value)) {
       values[key] = value;
     } else {

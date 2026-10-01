@@ -74,8 +74,10 @@ const LIMITS = Object.freeze({
 const COMPONENT_METADATA_PROPERTIES = new Set([
   "$Name", "$Type", "$Version", "$Components", "Uuid"
 ]);
+// BlocksToolkit configures editor drawers and has no runtime behavior.
+const FORM_EDITOR_ONLY_PROPERTIES = new Set(["BlocksToolkit"]);
 const FORM_BUILD_ONLY_PROPERTIES = new Set(["AppName"]);
 
 Object.assign(WebPreview, { COMPONENTS, BLOCKS, LIMITS, COMPONENT_METADATA_PROPERTIES,
-  FORM_BUILD_ONLY_PROPERTIES });
+  FORM_BUILD_ONLY_PROPERTIES, FORM_EDITOR_ONLY_PROPERTIES });
 })(globalThis.WebPreview ||= {});

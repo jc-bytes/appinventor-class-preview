@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-UhD8TbwcWDJIsj/VmvKRjRvMbNrYdlXTmDnDTxjT11k='; style-src 'sha256-os7/z24tNzAY6B7GPmK5DoM697Fh9eGNdmFnJoyA49Y='; img-src data: blob:; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-AjMtz+JMiqPUcie1T9mYPF35jSxWTHe4L1QR0/e4xHU='; style-src 'sha256-os7/z24tNzAY6B7GPmK5DoM697Fh9eGNdmFnJoyA49Y='; img-src data: blob:; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none';">
   <title>App preview frame</title>
   <style>:root {
   color-scheme: light;
@@ -132,14 +132,16 @@ const LIMITS = Object.freeze({
 const COMPONENT_METADATA_PROPERTIES = new Set([
   "$Name", "$Type", "$Version", "$Components", "Uuid"
 ]);
+// BlocksToolkit configures editor drawers and has no runtime behavior.
+const FORM_EDITOR_ONLY_PROPERTIES = new Set(["BlocksToolkit"]);
 const FORM_BUILD_ONLY_PROPERTIES = new Set(["AppName"]);
 
 Object.assign(WebPreview, { COMPONENTS, BLOCKS, LIMITS, COMPONENT_METADATA_PROPERTIES,
-  FORM_BUILD_ONLY_PROPERTIES });
+  FORM_BUILD_ONLY_PROPERTIES, FORM_EDITOR_ONLY_PROPERTIES });
 })(globalThis.WebPreview ||= {});
 
 (function (WebPreview) {
-const { BLOCKS, COMPONENTS, COMPONENT_METADATA_PROPERTIES, FORM_BUILD_ONLY_PROPERTIES, LIMITS } = WebPreview;
+const { BLOCKS, COMPONENTS, COMPONENT_METADATA_PROPERTIES, FORM_BUILD_ONLY_PROPERTIES, FORM_EDITOR_ONLY_PROPERTIES, LIMITS } = WebPreview;
 
 const NAME_PATTERN = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
 const GLOBAL_PREFIX = "global ";
@@ -412,7 +414,8 @@ function normalizeComponent(properties, state, depth) {
 
   const values = Object.create(null);
   for (const [key, value] of Object.entries(properties)) {
-    if (COMPONENT_METADATA_PROPERTIES.has(key) || key.startsWith("$")) continue;
+    if (COMPONENT_METADATA_PROPERTIES.has(key) || key.startsWith("$") ||
+        (type === "Form" && FORM_EDITOR_ONLY_PROPERTIES.has(key))) continue;
     if (["string", "number", "boolean"].includes(typeof value)) {
       values[key] = value;
     } else {
