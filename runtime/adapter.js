@@ -90,6 +90,22 @@ function convertBlock(block, state, depth) {
   const type = block.getAttribute("type") || "(missing type)";
   state.seenTypes.add(type);
 
+  if (WebPreview.EXTENDED_BLOCKS.has(type)) {
+    const fields = Object.fromEntries(directChildren(block, "field").map(e => [e.getAttribute("name"), e.textContent]));
+    const mutation = propertyMutation(block);
+    const attrs = mutation ? Object.fromEntries(Array.from(mutation.attributes, a => [a.name, a.value])) : {};
+    if (attrs.is_generic === "true") return unsupported(type, state);
+    const values = Object.fromEntries(directChildren(block, "value").map(e => {
+      const child = directChildren(e, "block")[0] || directChildren(e, "shadow")[0];
+      return [e.getAttribute("name"), child ? convertBlock(child, state, depth + 1) : {kind:"literal", value:""}];
+    }));
+    const bodies = Object.fromEntries(directChildren(block, "statement").map(e => {
+      const first = directChildren(e, "block")[0];
+      return [e.getAttribute("name"), first ? convertStatementChain(first, state, depth + 1) : []];
+    }));
+    return {kind:"block", type, fields, mutation:attrs, values, bodies,
+      args:mutation ? directChildren(mutation, "arg").map(e => e.getAttribute("name")) : []};
+  }
   if (type === "text") {
     const value = fieldValue(block, "TEXT");
     return value === null ? unsupported(type, state) : { kind: "literal", value };
@@ -112,13 +128,14 @@ function convertBlock(block, state, depth) {
   }
   if (type === "lexical_variable_get") {
     const name = globalName(fieldValue(block, "VAR"));
-    return name ? { kind: "getGlobal", name } : unsupported(type, state);
+    const local = fieldValue(block, "VAR");
+    return name ? { kind: "getGlobal", name } : local ? {kind:"getLocal", name:local} : unsupported(type, state);
   }
   if (type === "lexical_variable_set") {
     const name = globalName(fieldValue(block, "VAR"));
     const value = blockFromInput(block, "VALUE");
-    if (!name || !value) return unsupported(type, state);
-    return { kind: "setGlobal", name, value: convertBlock(value, state, depth + 1) };
+    if (!value) return unsupported(type, state);
+    return { kind: name ? "setGlobal" : "setLocal", name: name || fieldValue(block, "VAR"), value: convertBlock(value, state, depth + 1) };
   }
   if (type === "text_join") {
     const count = Number(propertyMutation(block)?.getAttribute("items") ?? 2);
@@ -165,6 +182,7 @@ function convertBlock(block, state, depth) {
       component,
       componentType,
       event,
+      parameters: mutation ? directChildren(mutation, "arg").map(e => e.getAttribute("name")) : [],
       body: first ? convertStatementChain(first, state, depth + 1) : []
     };
   }
@@ -221,12 +239,15 @@ function parseBlocks(source, { DOMParserClass = globalThis.DOMParser } = {}) {
   if (roots.length > LIMITS.blocks) {
     throw new Error("This project has too many blocks for Web Preview.");
   }
+  const procedures = [];
   const events = [];
   const globals = [];
   const unsupportedBlocks = [];
   for (const block of roots) {
     const converted = convertBlock(block, state, 0);
-    if (converted.kind === "event") {
+    if (converted.kind === "block" && converted.type === "procedures_defnoreturn") {
+      procedures.push(converted);
+    } else if (converted.kind === "event") {
       events.push(converted);
     } else if (converted.kind === "global") {
       if (globals.some(global => global.name === converted.name)) {
@@ -245,7 +266,7 @@ function parseBlocks(source, { DOMParserClass = globalThis.DOMParser } = {}) {
     if (!BLOCKS.has(blockType)) state.unsupportedBlocks.add(blockType);
   }
   unsupportedBlocks.push(...state.unsupportedBlocks);
-  return { events, globals, blockTypes: Array.from(state.seenTypes), unsupportedBlocks };
+  return { events, globals, procedures, blockTypes: Array.from(state.seenTypes), unsupportedBlocks };
 }
 
 function normalizeComponent(properties, state, depth) {
@@ -336,6 +357,15 @@ function adaptProject(scmSource, blocksSource, options = {}) {
     }
   };
   const checkExpression = expression => {
+    if (expression.kind === "block") {
+      Object.values(expression.values).forEach(checkExpression);
+      Object.values(expression.bodies).forEach(checkStatements);
+      if (expression.type === "component_method") {
+        const m = expression.mutation;
+        const c = components.get(m.instance_name);
+        if (!c || !COMPONENTS.get(c.type)?.methods?.has(m.method_name)) unsupportedOperations.add(`method ${m.instance_name}.${m.method_name}`);
+      }
+    }
     if (expression.kind === "getProperty") {
       checkProperty(expression.component, expression.property);
     } else if (expression.kind === "getGlobal") {
@@ -348,7 +378,8 @@ function adaptProject(scmSource, blocksSource, options = {}) {
   };
   const checkStatements = statements => {
     for (const statement of statements) {
-      if (statement.kind === "setProperty") {
+      if (statement.kind === "block") { checkExpression(statement);
+      } else if (statement.kind === "setProperty") {
         checkProperty(statement.component, statement.property);
         checkExpression(statement.value);
       } else if (statement.kind === "setGlobal") {
@@ -368,11 +399,12 @@ function adaptProject(scmSource, blocksSource, options = {}) {
     checkStatements(event.body);
   }
   for (const global of blocks.globals) checkExpression(global.value);
+  for (const procedure of blocks.procedures) checkExpression(procedure);
 
   return {
     version: 1,
     screen,
-    program: { events: blocks.events, globals: blocks.globals },
+    program: { events: blocks.events, globals: blocks.globals, procedures: blocks.procedures },
     features: {
       blockTypes: blocks.blockTypes,
       unsupportedBlocks: blocks.unsupportedBlocks,

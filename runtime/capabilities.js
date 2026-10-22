@@ -61,13 +61,36 @@ const BLOCKS = new Map([
   ["text_join", "text join"]
 ]);
 
+const EXTENDED_BLOCKS = new Set([
+  "procedures_defnoreturn", "procedures_callnoreturn", "component_method", "component_component_block",
+  "lists_create_with", "lists_select_item", "lists_length", "lists_is_list", "lists_add_items",
+  "lists_remove_item", "lists_replace_item", "pair", "dictionaries_create_with", "dictionaries_lookup",
+  "dictionaries_set_pair", "text_trim", "logic_compare", "logic_operation", "logic_negate",
+  "math_compare", "math_add", "math_subtract", "controls_choose", "controls_if", "controls_forEach"
+]);
+for (const name of EXTENDED_BLOCKS) BLOCKS.set(name, name);
+COMPONENTS.get("Form").events = new Set(["Initialize", "ErrorOccurred"]);
+for (const p of ["TitleVisible", "Scrollable", "Sizing", "Theme", "PrimaryColor", "PrimaryColorDark", "AccentColor"])
+  COMPONENTS.get("Form").properties.add(p);
+COMPONENTS.get("TextBox").properties.add("MultiLine");
+COMPONENTS.set("PasswordTextBox", {...COMPONENTS.get("TextBox")});
+COMPONENTS.set("HorizontalArrangement", {...COMPONENTS.get("VerticalArrangement")});
+for (const [type, properties, events, methods, defaults] of [
+  ["Web", ["Url", "RequestHeaders", "Timeout", "SaveResponse"], ["GotText", "TimedOut"],
+    ["Get", "PostText", "PutText", "JsonObjectEncode", "JsonTextDecodeWithDictionaries"], {Timeout:15000}],
+  ["TinyDB", ["Namespace"], [], ["GetValue", "StoreValue"], {Namespace:"TinyDB"}],
+  ["Player", ["Source", "Volume", "PlayOnlyInForeground"], [], ["Start", "Stop"], {Volume:100}],
+  ["Clock", ["TimerEnabled", "TimerInterval", "TimerAlwaysFires"], ["Timer"], [], {TimerEnabled:false,TimerInterval:1000}]
+]) COMPONENTS.set(type, {element:"span", nonVisible:true, properties:new Set(properties),
+  events:new Set(events), methods:new Set(methods), defaults});
+
 const LIMITS = Object.freeze({
   sourceCharacters: 500_000,
   components: 200,
   componentDepth: 40,
   blocks: 2_000,
   blockDepth: 100,
-  executionSteps: 1_000,
+  executionSteps: 10_000,
   expressionDepth: 100
 });
 
@@ -78,6 +101,6 @@ const COMPONENT_METADATA_PROPERTIES = new Set([
 const FORM_EDITOR_ONLY_PROPERTIES = new Set(["BlocksToolkit"]);
 const FORM_BUILD_ONLY_PROPERTIES = new Set(["AppName"]);
 
-Object.assign(WebPreview, { COMPONENTS, BLOCKS, LIMITS, COMPONENT_METADATA_PROPERTIES,
+Object.assign(WebPreview, { EXTENDED_BLOCKS, COMPONENTS, BLOCKS, LIMITS, COMPONENT_METADATA_PROPERTIES,
   FORM_BUILD_ONLY_PROPERTIES, FORM_EDITOR_ONLY_PROPERTIES });
 })(globalThis.WebPreview ||= {});

@@ -11,3 +11,10 @@ The preview code and device artwork come from an Apache-2.0 App Inventor fork. `
 The reader excludes the Screen's `BlocksToolkit` setting from the runtime model. This setting controls the App Inventor editor's available blocks and components. Large toolkits therefore do not prevent the screen from opening; runtime property limits still apply.
 
 A browser regression for the rice/chicken LunchApp is available at `tests/verify-lunchapp.cjs`. With Playwright installed and Chrome available, run `node tests/verify-lunchapp.cjs /path/to/LunchApp.aia https://jc-bytes.github.io/appinventor-class-preview/`. It checks import, rice/chicken/rice confirmations, stored selection, compatibility reporting, and the PNG download. The supplied `.aia` remains local.
+
+Cultural Language support (2026-10-21): the viewer now supports the supplied app's Web requests,
+email/password Firebase sign-in, audio assets, progress saving, TinyDB and clock events.
+Students build in official MIT App Inventor, export a current .aia, and choose it here after
+changes. The file stays in the browser; signing in contacts the configured classroom Firebase
+project. Preview progress uses a separate namespace from the Android app.
+No teacher model or answer project is included in this site.

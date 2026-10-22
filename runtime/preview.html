@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-AjMtz+JMiqPUcie1T9mYPF35jSxWTHe4L1QR0/e4xHU='; style-src 'sha256-os7/z24tNzAY6B7GPmK5DoM697Fh9eGNdmFnJoyA49Y='; img-src data: blob:; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-fMH5WP1OgDVfCholQxQyKabkLbLM7nhu1RM/Avr8D6E='; style-src 'sha256-UvGmqVCMX1H3ByCNbYGzlpktvQaOj0sZnnaj3Th+sgc='; img-src data: blob:; media-src data: blob:; connect-src https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://languageapp-5e07a-default-rtdb.firebaseio.com; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none';">
   <title>App preview frame</title>
   <style>:root {
   color-scheme: light;
@@ -51,6 +51,11 @@ body.phone-preview { min-height: 100vh; padding: 0; background: #fff; }
 .phone-preview #preview-mount { display: block; min-height: 100vh; }
 .phone-preview .webpreview-screen,
 .phone-preview .webpreview-screen[data-orientation="landscape"] { width: 100%; min-height: 100vh; border: 0; border-radius: 0; box-shadow: none; }
+
+.webpreview-horizontalarrangement { display:flex; flex-direction:row !important; justify-content:space-between; gap:8px; }
+.webpreview-passwordtextbox { min-height:40px; border:1px solid #9ba8b8; border-radius:4px; padding:8px 10px; font:inherit; }
+.webpreview-component[hidden] { display:none !important; }
+.webpreview-label { white-space:pre-wrap; }
 </style>
 </head>
 <body class="phone-preview">
@@ -119,13 +124,36 @@ const BLOCKS = new Map([
   ["text_join", "text join"]
 ]);
 
+const EXTENDED_BLOCKS = new Set([
+  "procedures_defnoreturn", "procedures_callnoreturn", "component_method", "component_component_block",
+  "lists_create_with", "lists_select_item", "lists_length", "lists_is_list", "lists_add_items",
+  "lists_remove_item", "lists_replace_item", "pair", "dictionaries_create_with", "dictionaries_lookup",
+  "dictionaries_set_pair", "text_trim", "logic_compare", "logic_operation", "logic_negate",
+  "math_compare", "math_add", "math_subtract", "controls_choose", "controls_if", "controls_forEach"
+]);
+for (const name of EXTENDED_BLOCKS) BLOCKS.set(name, name);
+COMPONENTS.get("Form").events = new Set(["Initialize", "ErrorOccurred"]);
+for (const p of ["TitleVisible", "Scrollable", "Sizing", "Theme", "PrimaryColor", "PrimaryColorDark", "AccentColor"])
+  COMPONENTS.get("Form").properties.add(p);
+COMPONENTS.get("TextBox").properties.add("MultiLine");
+COMPONENTS.set("PasswordTextBox", {...COMPONENTS.get("TextBox")});
+COMPONENTS.set("HorizontalArrangement", {...COMPONENTS.get("VerticalArrangement")});
+for (const [type, properties, events, methods, defaults] of [
+  ["Web", ["Url", "RequestHeaders", "Timeout", "SaveResponse"], ["GotText", "TimedOut"],
+    ["Get", "PostText", "PutText", "JsonObjectEncode", "JsonTextDecodeWithDictionaries"], {Timeout:15000}],
+  ["TinyDB", ["Namespace"], [], ["GetValue", "StoreValue"], {Namespace:"TinyDB"}],
+  ["Player", ["Source", "Volume", "PlayOnlyInForeground"], [], ["Start", "Stop"], {Volume:100}],
+  ["Clock", ["TimerEnabled", "TimerInterval", "TimerAlwaysFires"], ["Timer"], [], {TimerEnabled:false,TimerInterval:1000}]
+]) COMPONENTS.set(type, {element:"span", nonVisible:true, properties:new Set(properties),
+  events:new Set(events), methods:new Set(methods), defaults});
+
 const LIMITS = Object.freeze({
   sourceCharacters: 500_000,
   components: 200,
   componentDepth: 40,
   blocks: 2_000,
   blockDepth: 100,
-  executionSteps: 1_000,
+  executionSteps: 10_000,
   expressionDepth: 100
 });
 
@@ -136,7 +164,7 @@ const COMPONENT_METADATA_PROPERTIES = new Set([
 const FORM_EDITOR_ONLY_PROPERTIES = new Set(["BlocksToolkit"]);
 const FORM_BUILD_ONLY_PROPERTIES = new Set(["AppName"]);
 
-Object.assign(WebPreview, { COMPONENTS, BLOCKS, LIMITS, COMPONENT_METADATA_PROPERTIES,
+Object.assign(WebPreview, { EXTENDED_BLOCKS, COMPONENTS, BLOCKS, LIMITS, COMPONENT_METADATA_PROPERTIES,
   FORM_BUILD_ONLY_PROPERTIES, FORM_EDITOR_ONLY_PROPERTIES });
 })(globalThis.WebPreview ||= {});
 
@@ -232,6 +260,22 @@ function convertBlock(block, state, depth) {
   const type = block.getAttribute("type") || "(missing type)";
   state.seenTypes.add(type);
 
+  if (WebPreview.EXTENDED_BLOCKS.has(type)) {
+    const fields = Object.fromEntries(directChildren(block, "field").map(e => [e.getAttribute("name"), e.textContent]));
+    const mutation = propertyMutation(block);
+    const attrs = mutation ? Object.fromEntries(Array.from(mutation.attributes, a => [a.name, a.value])) : {};
+    if (attrs.is_generic === "true") return unsupported(type, state);
+    const values = Object.fromEntries(directChildren(block, "value").map(e => {
+      const child = directChildren(e, "block")[0] || directChildren(e, "shadow")[0];
+      return [e.getAttribute("name"), child ? convertBlock(child, state, depth + 1) : {kind:"literal", value:""}];
+    }));
+    const bodies = Object.fromEntries(directChildren(block, "statement").map(e => {
+      const first = directChildren(e, "block")[0];
+      return [e.getAttribute("name"), first ? convertStatementChain(first, state, depth + 1) : []];
+    }));
+    return {kind:"block", type, fields, mutation:attrs, values, bodies,
+      args:mutation ? directChildren(mutation, "arg").map(e => e.getAttribute("name")) : []};
+  }
   if (type === "text") {
     const value = fieldValue(block, "TEXT");
     return value === null ? unsupported(type, state) : { kind: "literal", value };
@@ -254,13 +298,14 @@ function convertBlock(block, state, depth) {
   }
   if (type === "lexical_variable_get") {
     const name = globalName(fieldValue(block, "VAR"));
-    return name ? { kind: "getGlobal", name } : unsupported(type, state);
+    const local = fieldValue(block, "VAR");
+    return name ? { kind: "getGlobal", name } : local ? {kind:"getLocal", name:local} : unsupported(type, state);
   }
   if (type === "lexical_variable_set") {
     const name = globalName(fieldValue(block, "VAR"));
     const value = blockFromInput(block, "VALUE");
-    if (!name || !value) return unsupported(type, state);
-    return { kind: "setGlobal", name, value: convertBlock(value, state, depth + 1) };
+    if (!value) return unsupported(type, state);
+    return { kind: name ? "setGlobal" : "setLocal", name: name || fieldValue(block, "VAR"), value: convertBlock(value, state, depth + 1) };
   }
   if (type === "text_join") {
     const count = Number(propertyMutation(block)?.getAttribute("items") ?? 2);
@@ -307,6 +352,7 @@ function convertBlock(block, state, depth) {
       component,
       componentType,
       event,
+      parameters: mutation ? directChildren(mutation, "arg").map(e => e.getAttribute("name")) : [],
       body: first ? convertStatementChain(first, state, depth + 1) : []
     };
   }
@@ -363,12 +409,15 @@ function parseBlocks(source, { DOMParserClass = globalThis.DOMParser } = {}) {
   if (roots.length > LIMITS.blocks) {
     throw new Error("This project has too many blocks for Web Preview.");
   }
+  const procedures = [];
   const events = [];
   const globals = [];
   const unsupportedBlocks = [];
   for (const block of roots) {
     const converted = convertBlock(block, state, 0);
-    if (converted.kind === "event") {
+    if (converted.kind === "block" && converted.type === "procedures_defnoreturn") {
+      procedures.push(converted);
+    } else if (converted.kind === "event") {
       events.push(converted);
     } else if (converted.kind === "global") {
       if (globals.some(global => global.name === converted.name)) {
@@ -387,7 +436,7 @@ function parseBlocks(source, { DOMParserClass = globalThis.DOMParser } = {}) {
     if (!BLOCKS.has(blockType)) state.unsupportedBlocks.add(blockType);
   }
   unsupportedBlocks.push(...state.unsupportedBlocks);
-  return { events, globals, blockTypes: Array.from(state.seenTypes), unsupportedBlocks };
+  return { events, globals, procedures, blockTypes: Array.from(state.seenTypes), unsupportedBlocks };
 }
 
 function normalizeComponent(properties, state, depth) {
@@ -478,6 +527,15 @@ function adaptProject(scmSource, blocksSource, options = {}) {
     }
   };
   const checkExpression = expression => {
+    if (expression.kind === "block") {
+      Object.values(expression.values).forEach(checkExpression);
+      Object.values(expression.bodies).forEach(checkStatements);
+      if (expression.type === "component_method") {
+        const m = expression.mutation;
+        const c = components.get(m.instance_name);
+        if (!c || !COMPONENTS.get(c.type)?.methods?.has(m.method_name)) unsupportedOperations.add(`method ${m.instance_name}.${m.method_name}`);
+      }
+    }
     if (expression.kind === "getProperty") {
       checkProperty(expression.component, expression.property);
     } else if (expression.kind === "getGlobal") {
@@ -490,7 +548,8 @@ function adaptProject(scmSource, blocksSource, options = {}) {
   };
   const checkStatements = statements => {
     for (const statement of statements) {
-      if (statement.kind === "setProperty") {
+      if (statement.kind === "block") { checkExpression(statement);
+      } else if (statement.kind === "setProperty") {
         checkProperty(statement.component, statement.property);
         checkExpression(statement.value);
       } else if (statement.kind === "setGlobal") {
@@ -510,11 +569,12 @@ function adaptProject(scmSource, blocksSource, options = {}) {
     checkStatements(event.body);
   }
   for (const global of blocks.globals) checkExpression(global.value);
+  for (const procedure of blocks.procedures) checkExpression(procedure);
 
   return {
     version: 1,
     screen,
-    program: { events: blocks.events, globals: blocks.globals },
+    program: { events: blocks.events, globals: blocks.globals, procedures: blocks.procedures },
     features: {
       blockTypes: blocks.blockTypes,
       unsupportedBlocks: blocks.unsupportedBlocks,
@@ -631,7 +691,7 @@ function renderScreen(document, mount, project) {
 
   const title = project.screen.properties.Title;
   let heading = null;
-  if (typeof title === "string" && title.length > 0) {
+  if (project.screen.properties.TitleVisible !== "False" && typeof title === "string" && title.length > 0) {
     heading = document.createElement("h1");
     heading.className = "webpreview-title";
     heading.textContent = title;
@@ -670,6 +730,8 @@ function renderComponent(document, component, byName) {
   element.dataset.componentType = component.type;
   if (component.type === "Button") element.type = "button";
   if (component.type === "TextBox") element.type = "text";
+  if (component.type === "PasswordTextBox") { element.type = "password"; element.autocomplete = "off"; }
+  if (adapter.nonVisible) element.hidden = true;
   applyProperties(element, component, adapter);
   byName.set(component.name, { component, adapter, element });
   for (const child of component.children) {
@@ -697,7 +759,7 @@ function applyProperty(instance, property, value) {
       instance.titleElement = heading;
     }
   } else {
-    applyPropertyToElement(instance.element, property, value);
+    if (!instance.adapter.nonVisible) applyPropertyToElement(instance.element, property, value);
   }
 }
 
@@ -896,111 +958,190 @@ function argbToCss(argb) {
 Object.assign(WebPreview, { renderScreen, applyProperty, readProperty });
 })(globalThis.WebPreview ||= {});
 
-(function (WebPreview) {
-const { LIMITS, applyProperty, readProperty, renderScreen } = WebPreview;
+(function (W) {
+const { LIMITS, applyProperty, readProperty, renderScreen } = W;
 
-function createRuntime({ document, mount, project, onError = () => {} }) {
-  const rendered = renderScreen(document, mount, project);
-  const handlers = new Map();
-  const globals = new Map();
-  const initializationBudget = { steps: 0 };
-  for (const declaration of project.program.globals) {
-    globals.set(declaration.name, evaluate(declaration.value, rendered.components, globals,
-        initializationBudget, 0));
-  }
-
-  for (const event of project.program.events) {
-    const instance = rendered.components.get(event.component);
-    if (!instance || !instance.adapter.events.has(event.event)) continue;
-    const key = `${event.component}.${event.event}`;
-    const group = handlers.get(key) || [];
-    group.push(event);
-    handlers.set(key, group);
-  }
-
-  for (const [key, events] of handlers) {
-    const [componentName, eventName] = key.split(".");
-    const instance = rendered.components.get(componentName);
-    const domEvent = eventName === "Click" ? "click" : null;
-    if (!domEvent) continue;
-    instance.element.addEventListener(domEvent, () => {
-      try {
-        executeEvents(events, rendered.components, globals);
-      } catch (error) {
-        onError(error instanceof Error ? error.message : "Web Preview stopped this event.");
-      }
-    });
-  }
-
-  return {
-    ...rendered,
-    globals,
-    restart() {
-      return createRuntime({ document, mount, project: structuredClone(project), onError });
+// The browser preview is deliberately restricted to the classroom project's REST services.
+function allowedRequest(raw, method) {
+  let u; try {u = new URL(raw);} catch {return false;}
+  if (u.protocol !== 'https:' || u.username || u.password || u.hash || u.port) return false;
+  if (u.hostname === 'identitytoolkit.googleapis.com')
+    return method === 'POST' && /^\/v1\/accounts:(signInWithPassword|signUp|sendOobCode)$/.test(u.pathname);
+  if (u.hostname === 'securetoken.googleapis.com') return method === 'POST' && u.pathname === '/v1/token';
+  if (u.hostname === 'languageapp-5e07a-default-rtdb.firebaseio.com')
+    return method === 'GET' && /^\/(words|progress\/[A-Za-z0-9_-]{1,128}\/learned)\.json$/.test(u.pathname) ||
+      method === 'PUT' && /^\/progress\/[A-Za-z0-9_-]{1,128}\/learned\/[A-Za-z0-9_-]{1,128}\.json$/.test(u.pathname);
+  return false;
+}
+async function firebaseRequest(url, method, body, headers, timeout) {
+  if (!allowedRequest(url, method)) throw new Error('Web Preview blocked a URL outside the classroom Firebase services.');
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), Math.max(1000, Math.min(Number(timeout) || 15000, 30000)));
+  try {
+    if (String(body || '').length > 100000) throw new Error('Request is too large.');
+    const h = new Headers();
+    for (const pair of headers || []) {
+      if (!Array.isArray(pair) || pair.length !== 2 || String(pair[0]).toLowerCase() !== 'content-type')
+        throw new Error('Only Content-Type headers are supported in this preview.');
+      h.set(pair[0], pair[1]);
     }
+    const response = await fetch(url, {method, headers:h, body:method === 'GET' ? undefined : String(body),
+      credentials:'omit', redirect:'error', referrerPolicy:'no-referrer', signal:controller.signal});
+    const reader = response.body.getReader();
+    let length = 0, content = ''; const decoder = new TextDecoder();
+    for (;;) {
+      const {done, value} = await reader.read(); if (done) break;
+      length += value.byteLength;
+      if (length > 1000000) { await reader.cancel(); throw new Error('Response is too large.'); }
+      content += decoder.decode(value, {stream:true});
+    }
+    content += decoder.decode();
+    return {code:response.status, type:response.headers.get('content-type') || '', content};
+  } finally { clearTimeout(timer); }
+}
+
+function createRuntime({document, mount, project, onError = () => {}, request = firebaseRequest,
+    storage = Object.create(null), onStore = () => {}, assets = Object.create(null), audioFactory = () => new Audio()}) {
+  const rendered = renderScreen(document, mount, project);
+  const components = rendered.components, globals = new Map(), handlers = new Map();
+  const procedures = new Map((project.program.procedures || []).map(p => [p.fields.NAME, p]));
+  const timers = new Map(), players = new Map();
+  let disposed = false, pendingRequests = 0, requestCount = 0;
+  const budget = () => ({steps:0, calls:0});
+  const spend = b => { if (++b.steps > LIMITS.executionSteps) throw new Error('Web Preview stopped this event after its instruction limit.'); };
+  const own = (o,k) => o != null && Object.hasOwn(o,String(k));
+  const list = v => { if (!Array.isArray(v)) throw new Error('Expected a list.'); return v; };
+  const index = (a, n) => { const i=Number(n)-1; if (!Number.isInteger(i) || i<0 || i>=a.length) throw new Error('List index is outside the list.'); return i; };
+  const component = n => { const c=components.get(n); if (!c) throw new Error(`Component ${n} is missing.`); return c; };
+  const text = v => v === null ? 'null' : typeof v === 'boolean' ? String(v) : typeof v === 'object' ? JSON.stringify(v) : String(v);
+  function runStatements(body, locals, b) { for (const s of body) evaluate(s,locals,b,0); }
+  function evaluate(e, locals, b, depth) {
+    spend(b); if (depth > LIMITS.expressionDepth) throw new Error('Expression is too deeply nested.');
+    const ev = v => evaluate(v,locals,b,depth+1);
+    switch(e.kind) {
+      case 'literal':return e.value;
+      case 'getGlobal': if (!globals.has(e.name)) throw new Error(`Global ${e.name} is missing.`); return globals.get(e.name);
+      case 'setGlobal': if (!globals.has(e.name)) throw new Error(`Global ${e.name} is missing.`); globals.set(e.name,ev(e.value)); return;
+      case 'getLocal': if (!(e.name in locals)) throw new Error(`Variable ${e.name} is missing.`); return locals[e.name];
+      case 'setLocal': if (!(e.name in locals)) throw new Error(`Variable ${e.name} is missing.`); locals[e.name]=ev(e.value); return;
+      case 'getProperty':return readProperty(component(e.component),e.property);
+      case 'setProperty': {
+        const c=component(e.component); applyProperty(c,e.property,ev(e.value));
+        if (c.component.type==='Clock') updateTimer(e.component); return;
+      }
+      case 'joinText':return e.values.map(v=>text(ev(v))).join('');
+      case 'unsupported':throw new Error(`Unsupported block ${e.blockType}.`);
+      case 'block':break;
+      default:throw new Error(`Unsupported operation ${e.kind}.`);
+    }
+    const val = n => { if (!e.values[n]) throw new Error(`Missing ${e.type}.${n}.`); return ev(e.values[n]); };
+    const vals = () => Object.values(e.values).map(ev);
+    const body = n => runStatements(e.bodies[n] || [],locals,b);
+    switch(e.type) {
+      case 'lists_create_with': return vals();
+      case 'pair':return [val('KEY'),val('VALUE')];
+      case 'dictionaries_create_with':return Object.fromEntries(vals());
+      case 'dictionaries_lookup': { const d=val('DICT'), k=val('KEY'); return own(d,k) ? d[k] : val('NOTFOUND'); }
+      case 'dictionaries_set_pair': { const d=val('DICT'); if (!d || Array.isArray(d) || typeof d!=='object') throw new Error('Expected dictionary.'); Object.defineProperty(d,String(val('KEY')),{value:val('VALUE'),writable:true,enumerable:true,configurable:true}); return; }
+      case 'lists_select_item': { const a=list(val('LIST')); return a[index(a,val('NUM'))]; }
+      case 'lists_length':return list(val('LIST')).length;
+      case 'lists_is_list':return Array.isArray(val('ITEM'));
+      case 'lists_add_items': { const a=list(val('LIST')); if (a.length>=2000) throw new Error('List is too large.'); for (const k of Object.keys(e.values).filter(k=>k.startsWith('ITEM'))) a.push(val(k)); return; }
+      case 'lists_remove_item': { const a=list(val('LIST')); a.splice(index(a,val('INDEX')),1); return; }
+      case 'lists_replace_item': { const a=list(val('LIST')); a[index(a,val('NUM'))]=val('ITEM'); return; }
+      case 'text_trim':return text(val('TEXT')).trim();
+      case 'logic_compare':return e.fields.OP==='NEQ' ? val('A')!==val('B') : val('A')===val('B');
+      case 'logic_operation':return e.fields.OP==='OR' ? Boolean(val('A') || val('B')) : Boolean(val('A') && val('B'));
+      case 'logic_negate':return !val('BOOL');
+      case 'math_compare': { const a=val('A'),c=val('B'); return {GT:a>c,GTE:a>=c,LT:a<c,LTE:a<=c,EQ:a===c,NEQ:a!==c}[e.fields.OP]; }
+      case 'math_add':return vals().reduce((a,c)=>a+Number(c),0);
+      case 'math_subtract':return Number(val('A'))-Number(val('B'));
+      case 'controls_choose':return val(val('TEST') ? 'THENRETURN' : 'ELSERETURN');
+      case 'controls_if': { for (let i=0;e.values[`IF${i}`];i++) if (val(`IF${i}`)) { body(`DO${i}`); return; } body('ELSE'); return; }
+      case 'controls_forEach': {
+        for (const item of [...list(val('LIST'))]) { spend(b); const scope=Object.create(locals); scope[e.fields.VAR]=item; runStatements(e.bodies.DO || [],scope,b); } return;
+      }
+      case 'procedures_callnoreturn': {
+        const p=procedures.get(e.fields.PROCNAME); if (!p) throw new Error(`Procedure ${e.fields.PROCNAME} is missing.`);
+        if (++b.calls>50) throw new Error('Procedure call limit reached.');
+        const scope=Object.create(null); (p.args || []).forEach((n,i)=>scope[n]=val(`ARG${i}`));
+        try {runStatements(p.bodies.STACK || [],scope,b);} finally { b.calls--; } return;
+      }
+      case 'component_component_block':return e.mutation.instance_name;
+      case 'component_method':return method(e.mutation.instance_name,e.mutation.method_name,vals());
+      default:throw new Error(`Unsupported block ${e.type}.`);
+    }
+  }
+  function fire(name,event,args={}) {
+    if (disposed) return;
+    try { const b=budget(); for (const h of handlers.get(`${name}.${event}`) || []) runStatements(h.body,Object.assign(Object.create(null),args),b); }
+    catch (e) { onError(e.message || 'Preview event failed.'); }
+  }
+  function method(name,m,a) {
+    const c=component(name), p=c.component.properties;
+    if (!c.adapter.methods?.has(m)) throw new Error(`Unsupported method ${name}.${m}.`);
+    switch(c.component.type) {
+      case 'Web':
+        if (m==='JsonObjectEncode') return JSON.stringify(a[0]);
+        if (m==='JsonTextDecodeWithDictionaries') return JSON.parse(a[0]);
+        {
+          if (pendingRequests >= 8 || ++requestCount > 300) throw new Error('Preview request limit reached. Reopen Web Preview to start a new test.');
+          pendingRequests++;
+          const url=String(p.Url || ''), verb={Get:'GET',PostText:'POST',PutText:'PUT'}[m];
+          Promise.resolve().then(()=>request(url,verb,a[0],structuredClone(p.RequestHeaders || []),p.Timeout)).then(r=>{
+            fire(name,'GotText',{url,responseCode:r.code,responseType:r.type,responseContent:r.content});
+          }).catch(()=>{
+            if (disposed) return;
+            fire(name,'TimedOut',{url});
+            fire(project.screen.name,'ErrorOccurred',{component:name,functionName:m,errorNumber:1101,message:'Web request failed or was blocked by preview policy.'});
+          }).finally(()=>{pendingRequests--;}); return;
+        }
+      case 'TinyDB': {
+        const key=JSON.stringify([String(p.Namespace || 'TinyDB'),String(a[0])]);
+        if (m==='GetValue') return structuredClone(own(storage,key) ? storage[key] : a[1]);
+        const value=structuredClone(a[1]);
+        if (JSON.stringify(value).length>100000) throw new Error('Stored value is too large.');
+        Object.defineProperty(storage,key,{value,writable:true,enumerable:true,configurable:true}); onStore(structuredClone(storage)); return;
+      }
+      case 'Player': {
+        let player=players.get(name); if (!player) { player=audioFactory(); players.set(name,player); }
+        if (m==='Stop') {player.pause(); player.currentTime=0;return;}
+        const source=String(p.Source || '');
+        if (!Object.hasOwn(assets,source) || !/^data:audio\/(wav|mpeg|ogg);base64,[A-Za-z0-9+/=]+$/.test(assets[source])) throw new Error(`Recording ${source} is missing. Import the .aia with its recordings.`);
+        player.src=assets[source]; player.volume=Math.max(0,Math.min(1,Number(p.Volume ?? 100)/100));
+        player.play().catch(()=>onError('The browser could not play this recording. Tap Listen again.')); return;
+      }
+    }
+  }
+  function updateTimer(name) {
+    clearInterval(timers.get(name)); timers.delete(name);
+    const c=component(name), enabled=readProperty(c,'TimerEnabled');
+    if (enabled===true || enabled==='True') timers.set(name,setInterval(()=>fire(name,'Timer'),Math.max(100,Math.min(3600000,Number(readProperty(c,'TimerInterval')) || 1000))));
+  }
+  const initializationBudget = budget();
+  for (const d of project.program.globals) globals.set(d.name,evaluate(d.value,Object.create(null),initializationBudget,0));
+  for (const e of project.program.events) {
+    const c=components.get(e.component); if (!c?.adapter.events.has(e.event)) continue;
+    const key=`${e.component}.${e.event}`; handlers.set(key,[...(handlers.get(key)||[]),e]);
+  }
+  for (const [name,c] of components) {
+    if (c.adapter.events.has('Click')) c.element.addEventListener('click',()=>fire(name,'Click'));
+    if (c.component.type==='Clock') updateTimer(name);
+  }
+  fire(project.screen.name,'Initialize');
+  return {...rendered, globals, fire,
+    dispose() {disposed=true;for(const t of timers.values())clearInterval(t);for(const p of players.values())p.pause();},
+    restart() {this.dispose();return createRuntime({document,mount,project:structuredClone(project),onError,request,storage,onStore,assets,audioFactory});}
   };
 }
-
-function executeEvents(events, components, globals) {
-  const budget = { steps: 0 };
-  for (const event of events) executeStatements(event.body, components, globals, budget);
-}
-
-function executeStatements(statements, components, globals, budget) {
-  for (const statement of statements) {
-    spend(budget);
-    if (statement.kind === "setProperty") {
-      const instance = components.get(statement.component);
-      if (!instance) throw new Error(`Web Preview cannot find component ${statement.component}.`);
-      applyProperty(instance, statement.property, evaluate(statement.value, components, globals, budget, 0));
-    } else if (statement.kind === "setGlobal") {
-      if (!globals.has(statement.name)) throw new Error(`Web Preview cannot find global ${statement.name}.`);
-      globals.set(statement.name, evaluate(statement.value, components, globals, budget, 0));
-    } else if (statement.kind === "unsupported") {
-      throw new Error(`Web Preview cannot execute Blockly block ${statement.blockType}.`);
-    } else {
-      throw new Error(`Web Preview cannot execute operation ${statement.kind}.`);
-    }
-  }
-}
-
-function evaluate(expression, components, globals, budget, depth) {
-  if (depth > LIMITS.expressionDepth) throw new Error("Web Preview stopped a deeply nested expression.");
-  spend(budget);
-  if (expression.kind === "literal") return expression.value;
-  if (expression.kind === "getProperty") {
-    const instance = components.get(expression.component);
-    if (!instance) throw new Error(`Web Preview cannot find component ${expression.component}.`);
-    return readProperty(instance, expression.property);
-  }
-  if (expression.kind === "getGlobal") {
-    if (!globals.has(expression.name)) throw new Error(`Web Preview cannot find global ${expression.name}.`);
-    return globals.get(expression.name);
-  }
-  if (expression.kind === "joinText") {
-    return expression.values.map(value =>
-      String(evaluate(value, components, globals, budget, depth + 1))).join("");
-  }
-  if (expression.kind === "unsupported") {
-    throw new Error(`Web Preview cannot evaluate Blockly block ${expression.blockType}.`);
-  }
-  throw new Error(`Web Preview cannot evaluate expression ${expression.kind}.`);
-}
-
-function spend(budget) {
-  budget.steps += 1;
-  if (budget.steps > LIMITS.executionSteps) {
-    throw new Error("Web Preview stopped this event after its instruction limit.");
-  }
-}
-
-Object.assign(WebPreview, { createRuntime });
+Object.assign(W,{createRuntime,allowedRequest,firebaseRequest});
 })(globalThis.WebPreview ||= {});
 
 (function (WebPreview) {
 const { LIMITS } = WebPreview;
 
 function validateRuntimeModel(model) {
+  if (JSON.stringify(model).length>2000000) throw new Error("Preview model is too large.");
   if (!model || model.version !== 1 || !model.screen || !model.program ||
       !Array.isArray(model.program.events) || !Array.isArray(model.program.globals)) {
     throw new Error("Preview data has an unsupported format.");
@@ -1046,6 +1187,13 @@ function validateRuntimeModel(model) {
     globals.add(global.name);
     validateExpression(global.value, 0);
   }
+  if (model.program.procedures !== undefined && (!Array.isArray(model.program.procedures) || model.program.procedures.length > 200)) throw new Error("Invalid procedures.");
+  const procedureNames = new Set();
+  for (const p of model.program.procedures || []) {
+    validateExpression(p,0);
+    if (p.kind !== "block" || p.type !== "procedures_defnoreturn" || !validName(p.fields.NAME) || procedureNames.has(p.fields.NAME)) throw new Error("Invalid procedure definition.");
+    procedureNames.add(p.fields.NAME);
+  }
   for (const event of model.program.events) {
     if (typeof event.component !== "string" || typeof event.componentType !== "string" ||
         typeof event.event !== "string" || !Array.isArray(event.body)) {
@@ -1061,7 +1209,11 @@ function validateStatements(statements, depth) {
     throw new Error("Preview data contains too many or deeply nested blocks.");
   }
   for (const statement of statements) {
-    if (statement.kind === "setProperty") {
+    if (statement.kind === "block") { validateExpression(statement,depth+1);
+    } else if (statement.kind === "setLocal") {
+      if (!validName(statement.name)) throw new Error("Invalid local assignment.");
+      validateExpression(statement.value,depth+1);
+    } else if (statement.kind === "setProperty") {
       if (typeof statement.component !== "string" || typeof statement.property !== "string") {
         throw new Error("Preview data contains an invalid property operation.");
       }
@@ -1079,7 +1231,18 @@ function validateExpression(expression, depth) {
   if (depth > LIMITS.expressionDepth || !expression || typeof expression !== "object") {
     throw new Error("Preview data contains a deeply nested expression.");
   }
-  if (expression.kind === "literal") {
+  if (expression.kind === "block") {
+    if (!WebPreview.EXTENDED_BLOCKS.has(expression.type) || !expression.fields || !expression.mutation || !expression.values || !expression.bodies || !Array.isArray(expression.args) || expression.args.length>100) throw new Error("Invalid extended block.");
+    for (const record of [expression.fields,expression.mutation]) {
+      if (Object.keys(record).length>30 || Object.values(record).some(v=>typeof v!=="string" || v.length>1000)) throw new Error("Invalid block fields.");
+    }
+    if (expression.mutation.is_generic === "true" || expression.args.some(n=>!validName(n))) throw new Error("Invalid block arguments.");
+    if (Object.keys(expression.values).length>100 || Object.keys(expression.bodies).length>100) throw new Error("Too many block inputs.");
+    Object.values(expression.values).forEach(v=>validateExpression(v,depth+1));
+    Object.values(expression.bodies).forEach(v=>{if(!Array.isArray(v)) throw new Error("Invalid body.");validateStatements(v,depth+1);});
+  } else if (expression.kind === "getLocal") {
+    if (!validName(expression.name)) throw new Error("Invalid local variable.");
+  } else if (expression.kind === "literal") {
     if (!["string", "number", "boolean"].includes(typeof expression.value) ||
         (typeof expression.value === "number" && !Number.isFinite(expression.value)) ||
         (typeof expression.value === "string" && expression.value.length > 20_000)) {
@@ -1250,15 +1413,21 @@ window.addEventListener("message", event => {
 
   try {
     const model = WebPreview.validateRuntimeModel(message.project);
+    let launchError = false;
+    activeRuntime?.dispose();
     activeRuntime = WebPreview.createRuntime({
       document,
       mount,
       project: structuredClone(model),
-      onError: showError
+      onError: error => { launchError = true; showError(error); },
+      storage: message.storage || Object.create(null), assets: message.assets || Object.create(null),
+      onStore: storage => window.parent.postMessage({type:"webpreview:store", version:1, storage}, "*")
     });
+    if (launchError) return;
     setStatus("Preview running.", "ready");
     window.parent.postMessage({ type: "webpreview:status", version: 1, status: "Preview running." }, "*");
   } catch (error) {
+    activeRuntime?.dispose();
     activeRuntime = null;
     mount.replaceChildren();
     showError(error instanceof Error ? error.message : "Web Preview could not open this project.");

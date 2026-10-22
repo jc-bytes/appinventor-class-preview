@@ -21,6 +21,9 @@ const editorToken = query.get("editorToken") || "";
 const validEmbeddedParent = embedded && window.parent !== window && editorToken !== "" &&
     isAllowedParentOrigin(parentOrigin);
 
+let projectAssets = Object.create(null);
+let previewStorage = Object.create(null);
+let storageKey = "webpreview:unloaded";
 let projectModel = null;
 let frameReady = false;
 let lastLaunchRequest = null;
@@ -58,6 +61,9 @@ aiaFile.addEventListener("change", async () => {
     setLoading("Reading .aia file…");
     const archive = await JSZip.loadAsync(file);
     if (generation !== uploadGeneration) return;
+    projectAssets = Object.create(null);
+    storageKey = `webpreview:aia:${file.name}`;
+    try { previewStorage = JSON.parse(localStorage.getItem(storageKey) || "{}"); } catch { previewStorage = Object.create(null); }
     const entries = Object.values(archive.files);
     if (entries.length > 300) throw new Error("This .aia has too many files for Web Preview.");
     for (const entry of entries) {
@@ -65,6 +71,15 @@ aiaFile.addEventListener("change", async () => {
       if (!match || entry.dir) continue;
       const bky = archive.file(entry.name.replace(/\.scm$/i, ".bky"));
       uploadedScreens.set(match[1], { scm: entry, bky });
+    }
+    let assetBytes = 0;
+    for (const entry of entries) {
+      if (!/^assets\/[A-Za-z0-9_-]+\.(wav|mp3|ogg)$/i.test(entry.name)) continue;
+      const bytes = await entry.async("uint8array"); assetBytes += bytes.byteLength;
+      if (assetBytes > 10000000) throw new Error("Audio assets exceed 10 MB.");
+      let binary=""; for(let i=0;i<bytes.length;i+=8192) binary+=String.fromCharCode(...bytes.subarray(i,i+8192));
+      const ext=entry.name.split('.').pop().toLowerCase();
+      projectAssets[entry.name.slice(7)] = `data:audio/${ext==='mp3'?'mpeg':ext};base64,${btoa(binary)}`;
     }
     if (uploadedScreens.size === 0) throw new Error("This .aia contains no App Inventor screens.");
     screenChoice.replaceChildren(...Array.from(uploadedScreens.keys(), name => {
@@ -117,6 +132,8 @@ window.addEventListener("message", event => {
     }
     lastLaunchRequest = message.requestId;
     try {
+      projectAssets = message.assets || Object.create(null);
+      previewStorage = message.storage || Object.create(null);
       loadSource(message.scm, message.blocks);
       acknowledgeLaunch(message.requestId, event.source, event.origin);
     } catch (error) {
@@ -128,6 +145,13 @@ window.addEventListener("message", event => {
   if (event.source !== frame.contentWindow || event.origin !== "null") return;
   const message = event.data;
   if (!message || message.version !== 1) return;
+  if (message.type === "webpreview:store") {
+    if (!message.storage || JSON.stringify(message.storage).length > 1000000) return;
+    previewStorage = message.storage;
+    if (validEmbeddedParent) postToEditor({type:"webpreview:store", version:1, editorToken, storage:previewStorage});
+    else {try {localStorage.setItem(storageKey,JSON.stringify(previewStorage));} catch {launchStatus.textContent="Browser storage is unavailable. Progress lasts only for this preview.";}}
+    return;
+  }
   if (message.type === "webpreview:ready") {
     frameReady = true;
     sendProject();
@@ -285,7 +309,7 @@ function postToEditor(message, targetOrigin = parentOrigin) {
 
 function sendProject() {
   if (!frameReady || !projectModel) return;
-  frame.contentWindow.postMessage({ type: "webpreview:launch", version: 1, project: projectModel }, "*");
+  frame.contentWindow.postMessage({ type: "webpreview:launch", version: 1, project: projectModel, storage:previewStorage, assets:projectAssets }, "*");
 }
 
 function sendPing() {
@@ -293,7 +317,7 @@ function sendPing() {
 }
 
 function runtimeUrl() {
-  return new URL("./runtime/preview.html?v=6", window.location.href).href;
+  return new URL("./runtime/preview.html?v=8", window.location.href).href;
 }
 
 function loadSource(scm, blocks) {
