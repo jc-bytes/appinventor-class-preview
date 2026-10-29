@@ -317,7 +317,7 @@ function sendPing() {
 }
 
 function runtimeUrl() {
-  return new URL("./runtime/preview.html?v=8", window.location.href).href;
+  return new URL("./runtime/preview.html?v=9", window.location.href).href;
 }
 
 function loadSource(scm, blocks) {

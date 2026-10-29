@@ -18,3 +18,9 @@ Students build in official MIT App Inventor, export a current .aia, and choose i
 changes. The file stays in the browser; signing in contacts the configured classroom Firebase
 project. Preview progress uses a separate namespace from the Android app.
 No teacher model or answer project is included in this site.
+
+## Cultural Language practice repair, October 29, 2026
+
+The cloud model reads `/progress/<uid>.json` and saves `/progress/<uid>/bestScore.json`. The preview previously allowed only the simpler model's learned-word paths, so a progress read failed and the cloud model silently ignored practice answers. The transport now permits those two existing model paths within the same classroom Firebase project. Firebase rules continue to enforce access. Explicit component heights also override browser minimum heights so spacer labels retain their App Inventor dimensions.
+
+Run `tests/cloud-practice.html` from a static server. Its 16 checks execute the repaired model's actual blocks with controlled network responses and recording selection. They cover all three questions, feedback, scoring, restart, failed-progress-load practice, queued score recovery, user isolation, and phone answer placement. This does not establish successful live sign-in or Android-device acceptance.

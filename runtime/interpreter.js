@@ -9,8 +9,8 @@ function allowedRequest(raw, method) {
     return method === 'POST' && /^\/v1\/accounts:(signInWithPassword|signUp|sendOobCode)$/.test(u.pathname);
   if (u.hostname === 'securetoken.googleapis.com') return method === 'POST' && u.pathname === '/v1/token';
   if (u.hostname === 'languageapp-5e07a-default-rtdb.firebaseio.com')
-    return method === 'GET' && /^\/(words|progress\/[A-Za-z0-9_-]{1,128}\/learned)\.json$/.test(u.pathname) ||
-      method === 'PUT' && /^\/progress\/[A-Za-z0-9_-]{1,128}\/learned\/[A-Za-z0-9_-]{1,128}\.json$/.test(u.pathname);
+    return method === 'GET' && /^\/(words|progress\/[A-Za-z0-9_-]{1,128}(?:\/learned)?)\.json$/.test(u.pathname) ||
+      method === 'PUT' && /^\/progress\/[A-Za-z0-9_-]{1,128}\/(?:bestScore|learned\/[A-Za-z0-9_-]{1,128})\.json$/.test(u.pathname);
   return false;
 }
 async function firebaseRequest(url, method, body, headers, timeout) {

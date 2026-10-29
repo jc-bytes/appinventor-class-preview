@@ -1,0 +1,9 @@
+:root { font: 16px/1.5 system-ui, sans-serif; color: #17253c; background: #f2f5fa; }
+body { margin: 0; }
+main { width: min(760px, calc(100% - 32px)); margin: 32px auto; padding: 24px; border: 1px solid #d6deea; border-radius: 12px; background: white; }
+h1 { margin-top: 0; }
+#summary { font-weight: 700; }
+li { margin: 8px 0; }
+li[data-result="pass"] { color: #176b39; }
+li[data-result="fail"] { color: #a11b1b; }
+#test-mount { position: fixed; left: -10000px; top: 0; }

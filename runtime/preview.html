@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-fMH5WP1OgDVfCholQxQyKabkLbLM7nhu1RM/Avr8D6E='; style-src 'sha256-UvGmqVCMX1H3ByCNbYGzlpktvQaOj0sZnnaj3Th+sgc='; img-src data: blob:; media-src data: blob:; connect-src https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://languageapp-5e07a-default-rtdb.firebaseio.com; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-g2Jr6OP+J7W3Ig7omkkdkd6ZlaRTtE/vau4+ax21fCI='; style-src 'sha256-UvGmqVCMX1H3ByCNbYGzlpktvQaOj0sZnnaj3Th+sgc='; img-src data: blob:; media-src data: blob:; connect-src https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://languageapp-5e07a-default-rtdb.firebaseio.com; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none';">
   <title>App preview frame</title>
   <style>:root {
   color-scheme: light;
@@ -831,6 +831,9 @@ function applyPropertyToElement(element, property, value) {
       break;
     case "Height":
       element.style.height = dimension(value);
+      // An explicit App Inventor height also applies to short spacer labels.
+      // The browser's default label min-height must not stretch those spacers.
+      element.style.minHeight = Number(value) >= 0 ? "0" : "";
       break;
     case "AlignHorizontal": {
       const alignment = horizontalAlignment(value);
@@ -969,8 +972,8 @@ function allowedRequest(raw, method) {
     return method === 'POST' && /^\/v1\/accounts:(signInWithPassword|signUp|sendOobCode)$/.test(u.pathname);
   if (u.hostname === 'securetoken.googleapis.com') return method === 'POST' && u.pathname === '/v1/token';
   if (u.hostname === 'languageapp-5e07a-default-rtdb.firebaseio.com')
-    return method === 'GET' && /^\/(words|progress\/[A-Za-z0-9_-]{1,128}\/learned)\.json$/.test(u.pathname) ||
-      method === 'PUT' && /^\/progress\/[A-Za-z0-9_-]{1,128}\/learned\/[A-Za-z0-9_-]{1,128}\.json$/.test(u.pathname);
+    return method === 'GET' && /^\/(words|progress\/[A-Za-z0-9_-]{1,128}(?:\/learned)?)\.json$/.test(u.pathname) ||
+      method === 'PUT' && /^\/progress\/[A-Za-z0-9_-]{1,128}\/(?:bestScore|learned\/[A-Za-z0-9_-]{1,128})\.json$/.test(u.pathname);
   return false;
 }
 async function firebaseRequest(url, method, body, headers, timeout) {

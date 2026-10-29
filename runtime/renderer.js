@@ -155,6 +155,9 @@ function applyPropertyToElement(element, property, value) {
       break;
     case "Height":
       element.style.height = dimension(value);
+      // An explicit App Inventor height also applies to short spacer labels.
+      // The browser's default label min-height must not stretch those spacers.
+      element.style.minHeight = Number(value) >= 0 ? "0" : "";
       break;
     case "AlignHorizontal": {
       const alignment = horizontalAlignment(value);
