@@ -1,6 +1,6 @@
 const out=document.getElementById('results'), summary=document.getElementById('summary'), mount=document.getElementById('test-mount');
 const base='./fixtures/11-cultural-language-cloud/';
-const project=WebPreview.adaptProject(await (await fetch(base+'Screen1.scm')).text(),await (await fetch(base+'Screen1.bky')).text());
+const project=WebPreview.adaptProject(await (await fetch(base+'Screen1.scm?v=4')).text(),await (await fetch(base+'Screen1.bky?v=4')).text());
 let passed=0, failed=0;
 async function test(name, f) { const li=document.createElement('li');try{await f();li.textContent='PASS '+name;passed++;}catch(e){li.textContent='FAIL '+name+': '+e.message;failed++;}out.append(li);summary.textContent=`${passed} passed, ${failed} failed`; }
 function assert(v,m) {if(!v)throw new Error(m);}
@@ -97,6 +97,23 @@ await test('Practice still answers and keeps its score locally after a progress-
  readFails=false;click('RetrySyncButton');await settle();
  assert(!runtime.globals.get('queue').length,'score did not sync after recovery');
  click('LearnTab');
+});
+await test('Learned words save locally while the initial progress read fails, then sync on recovery',async()=>{
+ const pending={}, failureErrors=[];
+ readFails=true;
+ const r=WebPreview.createRuntime({document,mount,project:structuredClone(project),storage:pending,assets,request:fakeRequest,onError:e=>failureErrors.push(e)});
+ try {
+  r.components.get('EmailInput').element.value='test@example.invalid';r.components.get('PasswordInput').element.value='not-a-real-password';r.fire('SignInButton','Click');await settle();
+  assert(r.globals.get('ready')===false,'failed-read scenario did not run');
+  assert(!r.components.get('LearnedButton').element.disabled,'Mark as learned is disabled after a failed progress read');
+  r.components.get('LearnedButton').element.click();
+  assert(r.globals.get('learned').ju===true,'word was not learned locally');
+  assert(r.globals.get('queue').some(item=>item[0]==='learned/ju'),'learned word was not queued');
+  assert(JSON.stringify(pending).includes('learned/ju'),'pending word was not persisted');
+  readFails=false;r.fire('RetrySyncButton','Click');await settle();
+  assert(!r.globals.get('queue').length,'pending word did not sync after recovery');
+  assert(!failureErrors.length,failureErrors.join('; '));
+ } finally {readFails=false;r.dispose();}
 });
 await test('Network policy rejects other databases, origins, redirects, protocols and paths',()=>{
  for(const u of ['http://languageapp-5e07a-default-rtdb.firebaseio.com/words.json','https://evil.example/words.json','https://other.firebaseio.com/words.json','https://languageapp-5e07a-default-rtdb.firebaseio.com/.json','https://languageapp-5e07a-default-rtdb.firebaseio.com/words.json#x','https://user:pass@languageapp-5e07a-default-rtdb.firebaseio.com/words.json'])assert(!WebPreview.allowedRequest(u,'GET'),'allowed '+u);
