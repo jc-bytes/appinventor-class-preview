@@ -45,6 +45,19 @@ await test('Phone practice keeps every answer within the first 650 pixels',()=>{
  const bottom=runtime.components.get('Answer3').element.getBoundingClientRect().bottom-top;
  assert(bottom<=650,`last answer ends at ${Math.round(bottom)}px`);
 });
+await test('Wrong answers give feedback, ignore repeated taps and keep Next visible on a phone',()=>{
+ click('PracticeTab');
+ for(const wrong of [1,1,2]){
+  click('Answer'+wrong);
+  assert(String(props('FeedbackLabel').Text).startsWith('The answer is '),'corrective feedback missing');
+  click('Answer'+wrong);assert(runtime.globals.get('score')===0,'wrong answer or repeated tap scored');
+  const bottom=runtime.components.get('QuizNextButton').element.getBoundingClientRect().bottom-runtime.screenElement.getBoundingClientRect().top;
+  assert(bottom<=650,`Next question ends at ${Math.round(bottom)}px`);
+  click('QuizNextButton');
+ }
+ assert(String(props('FeedbackLabel').Text).includes('0 out of 3'),'result missing');
+ click('RestartQuizButton');
+});
 await test('Practice completes three questions with feedback, result and retry',async()=>{
  click('PracticeTab');
  for(let i=1;i<=3;i++){
